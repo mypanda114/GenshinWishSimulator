@@ -14,12 +14,11 @@
       - 导出Excel（含行着色、汇总指标）、四张独立PNG图表
       - 速度模式选择，终端彩色输出
       - 所有用户可见文本通过 i18n 模块管理，支持多语言
-      - 限定物品获取详情（Excel/Word）基于真实抽数
+      - 限定物品获取详情（Excel/Word）基于真实抽数（按获取顺序全局计算）
       - 修复四星物品星辉显示
       - 优化武器池定轨交互
       - 图表自适应：五星TOP10动态宽度，四星TOP10动态高度，饼图动态标签
       - Word报告字体统一（微软雅黑→宋体回退）
-      - 角色和武器池真实抽数独立计算，汇总表合并平均真实抽数
 """
 
 import random
@@ -155,8 +154,6 @@ class GachaState:
         self.four_star_pity = 0
 
         self.total_draws = 0          # 总抽卡次数
-        self.total_char_draws = 0     # 角色池累计抽数
-        self.total_weapon_draws = 0   # 武器池累计抽数
         self.starglitter = 0
         # 角色计数（包括限定和常驻）
         self.char_count = {"丝柯克": 0, "爱可菲": 0}
@@ -171,9 +168,9 @@ class GachaState:
         self.dual_weapon_mode = False        # 是否启用双限定武器策略模式
         self.strategy_log = []                # 策略日志
 
-        # 记录每个限定物品上次获得时的各池累计抽数，用于计算真实抽数
-        self.last_char_total = {"丝柯克": 0, "爱可菲": 0}
-        self.last_weapon_total = {"苍耀": 0, "香韵奏者": 0}
+        # 记录上次获得限定物品时的总抽数（用于全局顺序统计）
+        self.last_limited_total = 0
+        # 存储每个限定物品的获取真实抽数（按获取顺序）
         self.real_spins_limited = {"丝柯克": [], "爱可菲": [], "苍耀": [], "香韵奏者": []}
 
     def reset_weapon_fate(self):
@@ -258,13 +255,9 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
         pity = state.char_pity
         guarantee = state.char_guarantee
         lost_streak = state.char_lost_streak
-        # 更新角色池累计抽数
-        state.total_char_draws += 1
     else:
         state.weapon_pity += 1
         pity = state.weapon_pity
-        # 更新武器池累计抽数
-        state.total_weapon_draws += 1
 
     state.four_star_pity += 1
     state.total_draws += 1
@@ -333,12 +326,6 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
             star = 5
             state.char_pity = 0
 
-            # 记录限定角色的真实抽数（基于角色池累计）
-            if item_name in ["丝柯克", "爱可菲"]:
-                real_spin = state.total_char_draws - state.last_char_total[item_name]
-                state.real_spins_limited[item_name].append(real_spin)
-                state.last_char_total[item_name] = state.total_char_draws
-
         else:  # weapon
             # 武器池五星
             if effective_choice is None:
@@ -382,11 +369,11 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
             glitter = 10
             state.weapon_pity = 0
 
-            # 记录限定武器的真实抽数（基于武器池累计）
-            if item_name in ["苍耀", "香韵奏者"]:
-                real_spin = state.total_weapon_draws - state.last_weapon_total[item_name]
-                state.real_spins_limited[item_name].append(real_spin)
-                state.last_weapon_total[item_name] = state.total_weapon_draws
+        # 记录限定物品的真实抽数（按全局顺序）
+        if item_name in ["丝柯克", "爱可菲", "苍耀", "香韵奏者"]:
+            real_spin = state.total_draws - state.last_limited_total
+            state.real_spins_limited[item_name].append(real_spin)
+            state.last_limited_total = state.total_draws
 
         state.four_star_pity = 0
 
