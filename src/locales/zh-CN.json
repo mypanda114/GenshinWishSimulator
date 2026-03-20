@@ -125,11 +125,19 @@
     "option2": "2 - 生成 Plotly 可视化图表",
     "option3": "3 - 生成 Word 完整报告",
     "option4": "4 - 全部导出",
-    "enter": "请选择 [1/2/3/4]：",
+    "option5": "5 - 快速导出（无样式、无表格，适合大数据量，速度极快）",
+    "enter": "请选择 [1/2/3/4/5]：",
     "excel_saved": "✅ Excel记录已保存至 {filename}",
     "chart_saved": "🖼️ 图表图片已保存至 {filename}",
     "report_saved": "📄 Word报告已保存至 {filename}",
     "completed": "✅ 所有操作完成。本次输出保存在：{output_dir}"
+  },
+  "performance": {
+    "fast_mode_hint": "📌 提示：快速模式适合大量模拟。为获得流畅体验，建议单次模拟不超过 10000 抽。\n   若超过 10000 抽，导出时推荐使用【快速导出】（选项 5），可大幅缩短时间。",
+    "real_mode_hint": "📌 提示：真实节奏模式适合少量抽卡体验。如需模拟大量数据，请选择快速模式（2）。",
+    "large_data_warning": "⚡ 启用快速导出模式，将跳过样式和表格，写入速度大幅提升。",
+    "fast_export_notice": "⚡ 启用快速导出模式。",
+    "skip_charts": "数据量较大（{count}条），跳过图表生成以节省时间。"
   },
   "output_dir": "📁 本次运行输出目录：{dir}",
   "no_pulls": "未进行任何抽卡，退出。",

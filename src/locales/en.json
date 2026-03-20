@@ -126,11 +126,19 @@
     "option2": "2 - Generate Plotly charts",
     "option3": "3 - Generate Word report",
     "option4": "4 - Export all",
-    "enter": "Enter choice [1/2/3/4]:",
+    "option5": "5 - Fast Export (no styles/tables, extremely fast for large data)",
+    "enter": "Enter choice [1/2/3/4/5]:",
     "excel_saved": "✅ Excel records saved to {filename}",
     "chart_saved": "🖼️ Charts saved to {filename}",
     "report_saved": "📄 Word report saved to {filename}",
     "completed": "✅ All operations completed. Output saved in: {output_dir}"
+  },
+  "performance": {
+    "fast_mode_hint": "📌 Hint: Fast mode is suitable for large-scale simulations. For optimal experience, it is recommended not to exceed 10,000 pulls per session.\n   If exceeding 10,000 pulls, use [Fast Export] (option 5) when exporting to save time.",
+    "real_mode_hint": "📌 Hint: Realistic pace is suitable for small-scale experience. For large data, choose Fast mode (2).",
+    "large_data_warning": "⚡ Fast Export mode enabled. Styles and tables will be skipped for faster writing.",
+    "fast_export_notice": "⚡ Fast Export mode enabled.",
+    "skip_charts": "Large dataset ({count} records), skipping chart generation to save time."
   },
   "output_dir": "📁 Output directory for this session: {dir}",
   "no_pulls": "No pulls performed, exiting.",

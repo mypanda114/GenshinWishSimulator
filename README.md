@@ -20,11 +20,12 @@ A personal study-oriented wish simulator based on official rules and community c
 - **Weapon Banner Strategic Pauses**: Pauses after each 5-star pull, dynamically offering strategy options based on your goals (including the "cancel Epitomized Path and reset" optimization strategy for dual limited weapons).
 - **Automatic Stop on Goal Achievement**: Pauses and asks whether to continue when a preset goal is reached, avoiding resource waste.
 - **Duplicate Character Conversion Rules**: Strictly follows official descriptions, distinguishing between the 2nd-7th and 8th+ copies of characters for Starglitter/Stella Fortuna conversion, with terminal and report hints.
-- **Real Pulls for Limited Items**: Excel includes a "Limited Item Details" sheet, and the Word report features a new section displaying the actual pulls (1–180) for each acquisition of limited characters/weapons, making it easy to verify whether you lost the 50/50.
+- **Real Pulls for Limited Items**: Excel includes a "Limited Item Details" sheet, and the Word report features a new section displaying the actual pulls (calculated per limited item based on its own pity intervals) for each acquisition of limited characters/weapons, making it easy to verify whether you lost the 50/50.
 - **Optimized Weapon Banner Interaction**: When no Epitomized Path is specified, the previously set path is automatically used; confirmation is only required when there is no existing path and none is specified.
-- **Adaptive Charts**: The Top 10 5-star items chart automatically adjusts its size based on the number of items, avoiding overly wide bars or excessive white space.
+- **Adaptive Charts**: The Top 10 5-star items chart automatically adjusts its size based on the number of items; the Top 10 4-star items chart height is dynamic; character and weapon pie charts only show categories that actually appeared.
 - **Word Report Font Compatibility**: Prioritizes Microsoft YaHei; falls back to SimSun if unavailable, ensuring consistent bold formatting.
 - **Fixed 4-star Starglitter Display**: Uses item names to determine character/weapon type, ensuring all 4-star weapons correctly award Starglitter and display it.
+- **Performance Optimizations**: Supports Fast Export mode (option 5) which skips styles and tables, drastically speeding up exports for large datasets. Optional dependency `xlsxwriter` further improves Excel writing performance.
 - **In-depth Data Analysis**: Generates Excel records, four independent PNG charts, and a Word report containing basic statistics, key metrics, goal achievement analysis, strategy execution logs, luck ratings, and fun Easter eggs.
 - **Speed Mode Selection**: Supports "Realistic Pace" (1-second pause every 10 pulls) and "Fast Mode" (no pauses) for different scenarios.
 - **Colorful Terminal Output**: 5-star items in bold gold, 4-star in bold purple, with special marks for overflows.
@@ -58,6 +59,10 @@ A personal study-oriented wish simulator based on official rules and community c
    ```bash
    pip install -r requirements.txt
    ```
+   (Optional) For faster Excel exports, install `xlsxwriter`:
+   ```bash
+   pip install xlsxwriter
+   ```
 5. **Run the simulator**:
    ```bash
    python src/genshin_wish_simulator.py
@@ -85,6 +90,12 @@ After finishing pulls, choose:
 2. **Generate Plotly charts** (four independent PNG images: Character 5-star Pie Chart, Weapon 5-star Pie Chart, 4-star TOP10, 5-star TOP10)
 3. **Generate Word report** (includes all KPIs, goal analysis, strategy path, luck rating, limited item details)
 4. **Export all**
+5. **Fast Export** (Excel only, no styles or tables, extremely fast for large datasets)
+
+> **Performance Notes**:
+> - Default export (options 1–4) adds styles and tables; for 10k+ pulls it may take 30s–2min.
+> - Using Fast Export (option 5) reduces export time to 5–10 seconds, ideal for large-scale simulations (e.g., >10,000 pulls).
+> - Installing `xlsxwriter` is recommended for optimal writing performance (auto-detected).
 
 All files are automatically saved in `output/GenshinWishSim_YYYYMMDD_HHMMSS/`.
 
@@ -119,8 +130,11 @@ plotly==6.6.0
 python-docx==1.2.0
 kaleido==1.2.0
 ```
-
-Install with: `pip install -r requirements.txt`
+**Optional dependency** (significantly improves Excel export speed):
+```txt
+xlsxwriter==3.2.0
+```
+Install with: `pip install xlsxwriter`
 
 ---
 

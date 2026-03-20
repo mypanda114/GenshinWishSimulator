@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-原神抽卡模拟器 - 完整策略版
-================================
+原神抽卡模拟器 - 完整策略版（性能优化版）
+========================================
 功能：模拟6.4下半限定角色卡池（丝柯克、爱可菲）与武器卡池（苍耀、香韵奏者）
       - 完全基于官方规则，软保底采用社区公认概率曲线
       - 目标预设与达成预测（基于社区期望值）
@@ -11,14 +11,12 @@
       - 目标达成自动暂停（即时询问，避免重复提醒）
       - 重复角色转化规则（第2-7次与第8次+区分）
       - 策略日志记录，用于最终报告分析
-      - 导出Excel（含行着色、汇总指标）、四张独立PNG图表
+      - 导出Excel（支持快速导出模式，可选样式/表格）
+      - 四张独立PNG图表，支持自适应尺寸
       - 速度模式选择，终端彩色输出
       - 所有用户可见文本通过 i18n 模块管理，支持多语言
-      - 限定物品获取详情（Excel/Word）基于真实抽数（按获取顺序全局计算）
-      - 修复四星物品星辉显示
-      - 优化武器池定轨交互
-      - 图表自适应：五星TOP10动态宽度，四星TOP10动态高度，饼图动态标签
-      - Word报告字体统一（微软雅黑→宋体回退）
+      - 限定物品获取详情（Excel/Word）基于真实抽数（角色/武器池独立计算）
+      - 性能优化：大数据量下推荐使用快速导出选项5
 """
 
 import random
@@ -45,6 +43,14 @@ from i18n import init_i18n, t
 
 # 初始化翻译模块（默认为中文）
 init_i18n("zh-CN")
+
+# 尝试导入xlsxwriter，用于高性能Excel写入
+try:
+    import xlsxwriter
+    XLSXWRITER_AVAILABLE = True
+except ImportError:
+    XLSXWRITER_AVAILABLE = False
+    print("提示：安装 xlsxwriter 可大幅提升 Excel 导出速度（pip install xlsxwriter）")
 
 # ==================== ANSI 颜色定义 ====================
 COLOR_GOLD = "\033[93m"      # 金色
@@ -154,6 +160,8 @@ class GachaState:
         self.four_star_pity = 0
 
         self.total_draws = 0          # 总抽卡次数
+        self.total_char_draws = 0     # 角色池累计抽数
+        self.total_weapon_draws = 0   # 武器池累计抽数
         self.starglitter = 0
         # 角色计数（包括限定和常驻）
         self.char_count = {"丝柯克": 0, "爱可菲": 0}
@@ -168,9 +176,11 @@ class GachaState:
         self.dual_weapon_mode = False        # 是否启用双限定武器策略模式
         self.strategy_log = []                # 策略日志
 
-        # 记录上次获得限定物品时的总抽数（用于全局顺序统计）
-        self.last_limited_total = 0
-        # 存储每个限定物品的获取真实抽数（按获取顺序）
+        # 记录上次获得任意限定角色时的角色池总抽数（用于全局保底间隔）
+        self.last_char_limited_total = 0
+        # 记录上次获得任意限定武器时的武器池总抽数
+        self.last_weapon_limited_total = 0
+        # 存储每个限定物品的真实抽数（按获取顺序，分别存放）
         self.real_spins_limited = {"丝柯克": [], "爱可菲": [], "苍耀": [], "香韵奏者": []}
 
     def reset_weapon_fate(self):
@@ -255,9 +265,13 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
         pity = state.char_pity
         guarantee = state.char_guarantee
         lost_streak = state.char_lost_streak
+        # 更新角色池累计抽数
+        state.total_char_draws += 1
     else:
         state.weapon_pity += 1
         pity = state.weapon_pity
+        # 更新武器池累计抽数
+        state.total_weapon_draws += 1
 
     state.four_star_pity += 1
     state.total_draws += 1
@@ -326,6 +340,12 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
             star = 5
             state.char_pity = 0
 
+            # 记录限定角色的真实抽数（全局保底间隔）
+            if item_name in ["丝柯克", "爱可菲"]:
+                real_spin = state.total_char_draws - state.last_char_limited_total
+                state.real_spins_limited[item_name].append(real_spin)
+                state.last_char_limited_total = state.total_char_draws
+
         else:  # weapon
             # 武器池五星
             if effective_choice is None:
@@ -369,11 +389,11 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
             glitter = 10
             state.weapon_pity = 0
 
-        # 记录限定物品的真实抽数（按全局顺序）
-        if item_name in ["丝柯克", "爱可菲", "苍耀", "香韵奏者"]:
-            real_spin = state.total_draws - state.last_limited_total
-            state.real_spins_limited[item_name].append(real_spin)
-            state.last_limited_total = state.total_draws
+            # 记录限定武器的真实抽数（全局保底间隔）
+            if item_name in ["苍耀", "香韵奏者"]:
+                real_spin = state.total_weapon_draws - state.last_weapon_limited_total
+                state.real_spins_limited[item_name].append(real_spin)
+                state.last_weapon_limited_total = state.total_weapon_draws
 
         state.four_star_pity = 0
 
@@ -1072,15 +1092,27 @@ def get_luck_level(score, total_5star):
     else:
         return 1, t("luck.level1_title"), t("luck.level1_desc")
 
-# ==================== 11. 保存Excel ====================
-def save_to_excel(state, output_dir, expected_total=0):
+# ==================== 11. 保存Excel（优化版，支持快速导出） ====================
+def save_to_excel(state, output_dir, expected_total=0, fast_export=False):
+    """
+    保存 Excel 记录，支持快速模式（无样式、无表格）。
+    fast_export: 若为 True，则跳过所有样式和表格，仅写入原始数据，大幅提升速度。
+    """
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = os.path.join(output_dir, f"抽卡记录_{timestamp}.xlsx")
     os.makedirs(output_dir, exist_ok=True)
 
     metrics = calculate_metrics(state)
 
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+    # 选择写入引擎
+    engine = 'xlsxwriter' if XLSXWRITER_AVAILABLE else 'openpyxl'
+    if not fast_export and engine == 'openpyxl' and state.total_draws > 5000:
+        print("⚠️ 数据量较大，使用 openpyxl 可能较慢。建议安装 xlsxwriter 或使用快速导出模式。")
+    elif fast_export:
+        print(t("performance.fast_export_notice"))
+
+    with pd.ExcelWriter(filename, engine=engine) as writer:
+        # 角色记录
         if state.records_char:
             df_char = pd.DataFrame(state.records_char)
             cols = ["抽卡时间", "卡池", "获得物品", "类别", "星级", "总抽卡次数", "小保底内次数",
@@ -1088,6 +1120,7 @@ def save_to_excel(state, output_dir, expected_total=0):
             df_char = df_char[[c for c in cols if c in df_char.columns]]
             df_char.to_excel(writer, sheet_name='角色记录', index=False)
 
+        # 武器记录
         if state.records_weapon:
             df_weapon = pd.DataFrame(state.records_weapon)
             cols = ["抽卡时间", "卡池", "获得物品", "类别", "星级", "总抽卡次数", "小保底内次数",
@@ -1095,7 +1128,7 @@ def save_to_excel(state, output_dir, expected_total=0):
             df_weapon = df_weapon[[c for c in cols if c in df_weapon.columns]]
             df_weapon.to_excel(writer, sheet_name='武器记录', index=False)
 
-        # 新增：限定物品详情表（基于真实抽数）
+        # 限定物品详情
         limited_rows = []
         for item, spins in metrics['real_spins_limited'].items():
             for idx, spin in enumerate(spins, 1):
@@ -1104,6 +1137,7 @@ def save_to_excel(state, output_dir, expected_total=0):
             df_limited = pd.DataFrame(limited_rows)
             df_limited.to_excel(writer, sheet_name='限定物品详情', index=False)
 
+        # 汇总表
         expected = expected_total if expected_total else 0
         actual = state.total_draws
         deviation = actual - expected
@@ -1167,6 +1201,7 @@ def save_to_excel(state, output_dir, expected_total=0):
         df_summary = pd.DataFrame(summary_data)
         df_summary.to_excel(writer, sheet_name='汇总', index=False)
 
+        # 策略日志
         if state.strategy_log:
             log_entries = []
             for log in state.strategy_log:
@@ -1187,53 +1222,54 @@ def save_to_excel(state, output_dir, expected_total=0):
             df_strategy = pd.DataFrame(log_entries)
             df_strategy.to_excel(writer, sheet_name='策略日志', index=False)
 
-    wb = load_workbook(filename)
-    msyh_font = Font(name='微软雅黑', size=11)
-    gold_font = Font(name='微软雅黑', size=11, color='FFD700', bold=True)
-    purple_font = Font(name='微软雅黑', size=11, color='800080', bold=True)
+    # 如果不是快速导出，则添加样式和表格（使用 openpyxl 加载后处理）
+    if not fast_export:
+        try:
+            wb = load_workbook(filename)
+            msyh_font = Font(name='微软雅黑', size=11)
+            gold_font = Font(name='微软雅黑', size=11, color='FFD700', bold=True)
+            purple_font = Font(name='微软雅黑', size=11, color='800080', bold=True)
 
-    for sheet_name in wb.sheetnames:
-        if sheet_name in ['角色记录', '武器记录']:
-            ws = wb[sheet_name]
-            for row in ws.iter_rows():
-                for cell in row:
-                    cell.font = msyh_font
-            star_col = None
-            for col in range(1, ws.max_column + 1):
-                if ws.cell(row=1, column=col).value == "星级":
-                    star_col = col
-                    break
-            if star_col:
-                for row in range(2, ws.max_row + 1):
-                    star_val = ws.cell(row=row, column=star_col).value
-                    if star_val == 5:
-                        for col in range(1, ws.max_column + 1):
-                            ws.cell(row=row, column=col).font = gold_font
-                    elif star_val == 4:
-                        for col in range(1, ws.max_column + 1):
-                            ws.cell(row=row, column=col).font = purple_font
-        else:
-            ws = wb[sheet_name]
-            for row in ws.iter_rows():
-                for cell in row:
-                    cell.font = msyh_font
+            for sheet_name in wb.sheetnames:
+                if sheet_name in ['角色记录', '武器记录']:
+                    ws = wb[sheet_name]
+                    # 设置默认字体
+                    for row in ws.iter_rows():
+                        for cell in row:
+                            cell.font = msyh_font
+                    # 星级着色（简化：不逐单元格循环，直接忽略，或使用条件格式）
+                    # 大数据量下跳过，以免耗时
+                else:
+                    ws = wb[sheet_name]
+                    for row in ws.iter_rows():
+                        for cell in row:
+                            cell.font = msyh_font
 
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        table_ref = f"A1:{chr(64 + ws.max_column)}{ws.max_row}"
-        table = Table(displayName=sheet_name.replace(" ", "_") + "表", ref=table_ref)
-        style = TableStyleInfo(name="TableStyleLight1", showFirstColumn=False,
-                               showLastColumn=False, showRowStripes=False, showColumnStripes=False)
-        table.tableStyleInfo = style
-        ws.add_table(table)
+            # 为每个工作表添加表格样式（可选，大数据量下可能耗时，但保留）
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                if ws.max_row > 1:  # 有数据才添加表
+                    table_ref = f"A1:{chr(64 + ws.max_column)}{ws.max_row}"
+                    table = Table(displayName=sheet_name.replace(" ", "_") + "表", ref=table_ref)
+                    style = TableStyleInfo(name="TableStyleLight1", showFirstColumn=False,
+                                           showLastColumn=False, showRowStripes=False, showColumnStripes=False)
+                    table.tableStyleInfo = style
+                    ws.add_table(table)
 
-    wb.save(filename)
+            wb.save(filename)
+        except Exception as e:
+            print(f"⚠️ 样式添加失败（不影响数据）: {e}")
+
     print(t("export.excel_saved", filename=filename))
     return filename
 
-# ==================== 12. 生成PNG图片 ====================
-def generate_plots(state, excel_file):
-    """生成四张独立的图表：角色五星饼图、武器五星饼图、四星TOP10、五星TOP10"""
+# ==================== 12. 生成PNG图片（可跳过大数据量） ====================
+def generate_plots(state, excel_file, skip_if_large=True, threshold=5000):
+    """生成四张独立的图表，若数据量大于 threshold 则跳过（可选）"""
+    if skip_if_large and len(state.records_all) > threshold:
+        print(t("performance.skip_charts", count=len(state.records_all)))
+        return None
+
     df_char = pd.DataFrame(state.records_char) if state.records_char else pd.DataFrame()
     df_weapon = pd.DataFrame(state.records_weapon) if state.records_weapon else pd.DataFrame()
 
@@ -1249,7 +1285,6 @@ def generate_plots(state, excel_file):
                 akf = sum(char_5["获得物品"] == "爱可菲")
                 std = sum(char_5["获得物品"].isin(STANDARD_CHARS))
                 
-                # 构建动态标签和值
                 labels = []
                 values = []
                 if skk > 0:
@@ -1309,8 +1344,7 @@ def generate_plots(state, excel_file):
         if top4:
             names, counts = zip(*top4)
             num_items = len(names)
-            # 动态高度：每个条目约40px，最小高度300px
-            height = max(300, num_items * 40 + 80)  # 加80用于标题和边距
+            height = max(300, num_items * 40 + 80)
             fig3 = go.Figure(data=[go.Bar(x=counts, y=names, orientation='h')])
             fig3.update_layout(
                 title_text="四星物品获取数量TOP10",
@@ -1380,7 +1414,6 @@ def set_run_font(run, font_name='微软雅黑', size=11, bold=False):
 def generate_word_report(state, excel_file, chart_files, expected_total=0):
     doc = Document()
     
-    # 设置文档默认字体
     style = doc.styles['Normal']
     style.font.name = '微软雅黑'
     style.font.size = Pt(11)
@@ -1598,7 +1631,6 @@ def generate_word_report(state, excel_file, chart_files, expected_total=0):
         p = doc.add_paragraph(f"定轨保底触发次数：{fate_used}")
         set_run_font(p.runs[0], '微软雅黑', 11)
 
-    # 限定物品获取详情（基于真实抽数）
     heading = doc.add_heading('8. 限定物品获取详情', level=1)
     for run in heading.runs:
         set_run_font(run, '微软雅黑', 14, bold=True)
@@ -1669,6 +1701,12 @@ def main():
     print(t("welcome.speed_2"))
     mode_choice = input(t("welcome.input_choice")).strip()
     no_delay = (mode_choice == '2')
+
+    # 性能提示
+    if no_delay:
+        print("\n" + t("performance.fast_mode_hint"))
+    else:
+        print("\n" + t("performance.real_mode_hint"))
 
     targets, dual_weapon = setup_targets()
 
@@ -1782,7 +1820,15 @@ def main():
     print(t("export.option2"))
     print(t("export.option3"))
     print(t("export.option4"))
+    print(t("export.option5"))   # 新增快速导出选项
     choice = input(t("export.enter")).strip()
+
+    # 判断是否使用快速导出
+    fast_export = (choice == '5')
+    if fast_export and state.total_draws > 5000:
+        print(t("performance.large_data_warning"))
+    elif fast_export:
+        print(t("performance.fast_export_notice"))
 
     expected_total = 0
     if state.targets['C1'] > 0:
@@ -1794,17 +1840,22 @@ def main():
     if state.targets['W2'] > 0:
         expected_total += EXPECTATION['single_up_weapon'] * state.targets['W2']
 
-    excel_file = save_to_excel(state, output_dir, expected_total)
+    excel_file = save_to_excel(state, output_dir, expected_total, fast_export=fast_export)
 
-    if choice in ['2', '4']:
-        chart_files = generate_plots(state, excel_file)
+    # 根据导出选项决定是否生成图表和Word报告
+    generate_charts = (choice in ['2', '4']) and not fast_export
+    generate_word = (choice in ['3', '4']) and not fast_export
+
+    if generate_charts:
+        chart_files = generate_plots(state, excel_file, skip_if_large=True, threshold=5000)
     else:
         chart_files = None
 
-    if choice in ['3', '4']:
-        if choice == '3':
-            chart_files = generate_plots(state, excel_file)
-        word_file = generate_word_report(state, excel_file, chart_files, expected_total)
+    if generate_word:
+        if generate_charts:
+            word_file = generate_word_report(state, excel_file, chart_files, expected_total)
+        else:
+            word_file = generate_word_report(state, excel_file, None, expected_total)
 
     print(t("export.completed", output_dir=output_dir))
     print(t("goodbye"))
