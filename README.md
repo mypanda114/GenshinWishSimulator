@@ -133,7 +133,7 @@ init_i18n("en")   # Change from "zh-CN" to "en"
 ---
 
 ## 🤝 Contributing
-Welcome to submit bug reports or feature suggestions via [Issues](https://github.com/yourname/GenshinWishSimulator/issues). If you'd like to contribute code, please fork this repository, create your feature branch, and submit a Pull Request. Ensure your code style is consistent with the existing codebase and passes basic tests.
+Welcome to submit bug reports or feature suggestions via [Issues](https://github.com/mypanda114/GenshinWishSimulator/issues). If you'd like to contribute code, please fork this repository, create your feature branch, and submit a Pull Request. Ensure your code style is consistent with the existing codebase and passes basic tests.
 
 ---
 
