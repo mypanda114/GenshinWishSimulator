@@ -11,14 +11,15 @@
       - 目标达成自动暂停（即时询问，避免重复提醒）
       - 重复角色转化规则（第2-7次与第8次+区分）
       - 策略日志记录，用于最终报告分析
-      - 导出Excel（含行着色、汇总指标）、四张独立PNG图表（角色五星饼图、武器五星饼图、四星TOP10、五星TOP10）
+      - 导出Excel（含行着色、汇总指标）、四张独立PNG图表
       - 速度模式选择，终端彩色输出
       - 所有用户可见文本通过 i18n 模块管理，支持多语言
-      - 新增：限定物品获取详情（Excel/Word）基于真实抽数
-      - 修复：四星物品星辉显示
-      - 优化：武器池定轨交互
-      - 优化：五星TOP10图表自动调整尺寸
-      - 优化：Word报告字体统一（微软雅黑→宋体回退）
+      - 限定物品获取详情（Excel/Word）基于真实抽数
+      - 修复四星物品星辉显示
+      - 优化武器池定轨交互
+      - 图表自适应：五星TOP10动态宽度，四星TOP10动态高度，饼图动态标签
+      - Word报告字体统一（微软雅黑→宋体回退）
+      - 角色和武器池真实抽数独立计算，汇总表合并平均真实抽数
 """
 
 import random
@@ -153,7 +154,9 @@ class GachaState:
         # 共享四星保底计数器
         self.four_star_pity = 0
 
-        self.total_draws = 0
+        self.total_draws = 0          # 总抽卡次数
+        self.total_char_draws = 0     # 角色池累计抽数
+        self.total_weapon_draws = 0   # 武器池累计抽数
         self.starglitter = 0
         # 角色计数（包括限定和常驻）
         self.char_count = {"丝柯克": 0, "爱可菲": 0}
@@ -168,8 +171,9 @@ class GachaState:
         self.dual_weapon_mode = False        # 是否启用双限定武器策略模式
         self.strategy_log = []                # 策略日志
 
-        # 新增：记录每个限定物品上次获得时的总抽数，用于计算真实抽数
-        self.last_total_limited = {"丝柯克": 0, "爱可菲": 0, "苍耀": 0, "香韵奏者": 0}
+        # 记录每个限定物品上次获得时的各池累计抽数，用于计算真实抽数
+        self.last_char_total = {"丝柯克": 0, "爱可菲": 0}
+        self.last_weapon_total = {"苍耀": 0, "香韵奏者": 0}
         self.real_spins_limited = {"丝柯克": [], "爱可菲": [], "苍耀": [], "香韵奏者": []}
 
     def reset_weapon_fate(self):
@@ -254,9 +258,13 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
         pity = state.char_pity
         guarantee = state.char_guarantee
         lost_streak = state.char_lost_streak
+        # 更新角色池累计抽数
+        state.total_char_draws += 1
     else:
         state.weapon_pity += 1
         pity = state.weapon_pity
+        # 更新武器池累计抽数
+        state.total_weapon_draws += 1
 
     state.four_star_pity += 1
     state.total_draws += 1
@@ -325,11 +333,11 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
             star = 5
             state.char_pity = 0
 
-            # 记录限定角色的真实抽数
+            # 记录限定角色的真实抽数（基于角色池累计）
             if item_name in ["丝柯克", "爱可菲"]:
-                real_spin = state.total_draws - state.last_total_limited[item_name]
+                real_spin = state.total_char_draws - state.last_char_total[item_name]
                 state.real_spins_limited[item_name].append(real_spin)
-                state.last_total_limited[item_name] = state.total_draws
+                state.last_char_total[item_name] = state.total_char_draws
 
         else:  # weapon
             # 武器池五星
@@ -374,11 +382,11 @@ def draw_one(state, banner_type, banner_code, effective_choice=None):
             glitter = 10
             state.weapon_pity = 0
 
-            # 记录限定武器的真实抽数
+            # 记录限定武器的真实抽数（基于武器池累计）
             if item_name in ["苍耀", "香韵奏者"]:
-                real_spin = state.total_draws - state.last_total_limited[item_name]
+                real_spin = state.total_weapon_draws - state.last_weapon_total[item_name]
                 state.real_spins_limited[item_name].append(real_spin)
-                state.last_total_limited[item_name] = state.total_draws
+                state.last_weapon_total[item_name] = state.total_weapon_draws
 
         state.four_star_pity = 0
 
@@ -1014,11 +1022,17 @@ def calculate_metrics(state):
                     five_star_dup_2_7 += 6
                     five_star_dup_8plus += cnt - 7
 
-    # 使用真实抽数计算平均
+    # 使用真实抽数计算平均（各物品独立）
     avg_skk = sum(state.real_spins_limited["丝柯克"]) / len(state.real_spins_limited["丝柯克"]) if state.real_spins_limited["丝柯克"] else 0
     avg_akf = sum(state.real_spins_limited["爱可菲"]) / len(state.real_spins_limited["爱可菲"]) if state.real_spins_limited["爱可菲"] else 0
     avg_w1 = sum(state.real_spins_limited["苍耀"]) / len(state.real_spins_limited["苍耀"]) if state.real_spins_limited["苍耀"] else 0
     avg_w2 = sum(state.real_spins_limited["香韵奏者"]) / len(state.real_spins_limited["香韵奏者"]) if state.real_spins_limited["香韵奏者"] else 0
+
+    # 合并平均真实抽数（用于汇总表）
+    all_char_spins = state.real_spins_limited["丝柯克"] + state.real_spins_limited["爱可菲"]
+    all_weapon_spins = state.real_spins_limited["苍耀"] + state.real_spins_limited["香韵奏者"]
+    avg_all_char = sum(all_char_spins) / len(all_char_spins) if all_char_spins else 0
+    avg_all_weapon = sum(all_weapon_spins) / len(all_weapon_spins) if all_weapon_spins else 0
 
     return {
         'avg_up_char': round(avg_char, 1),
@@ -1044,7 +1058,9 @@ def calculate_metrics(state):
         'avg_akf': round(avg_akf, 1),
         'avg_w1': round(avg_w1, 1),
         'avg_w2': round(avg_w2, 1),
-        'real_spins_limited': state.real_spins_limited,  # 新增，用于导出详情
+        'avg_all_char': round(avg_all_char, 1),
+        'avg_all_weapon': round(avg_all_weapon, 1),
+        'real_spins_limited': state.real_spins_limited,
     }
 
 def get_luck_level(score, total_5star):
@@ -1144,8 +1160,8 @@ def save_to_excel(state, output_dir, expected_total=0):
                 metrics['early_gold'],
                 metrics['consecutive_gold'],
                 metrics['multi_gold_10'],
-                f"{metrics['avg_skk']:.1f} / {metrics['avg_akf']:.1f}",
-                f"{metrics['avg_w1']:.1f} / {metrics['avg_w2']:.1f}",
+                f"{metrics['avg_all_char']:.1f} 抽",
+                f"{metrics['avg_all_weapon']:.1f} 抽",
                 metrics['total_score'],
                 get_luck_level(metrics['total_score'], sum(1 for r in state.records_all if r["星级"] == 5))[1],
                 ", ".join(metrics['eggs']),
@@ -1238,41 +1254,66 @@ def generate_plots(state, excel_file):
     chart_files = []
 
     try:
-        # 1. 角色池五星类型分布饼图
+        # 1. 角色池五星类型分布饼图（动态标签）
         if not df_char.empty:
             char_5 = df_char[df_char["星级"] == 5]
-            skk = sum(char_5["获得物品"] == "丝柯克")
-            akf = sum(char_5["获得物品"] == "爱可菲")
-            std = sum(char_5["获得物品"].isin(STANDARD_CHARS))
-            fig1 = go.Figure(data=[go.Pie(labels=["丝柯克", "爱可菲", "常驻角色"],
-                                            values=[skk, akf, std])])
-            fig1.update_layout(title_text="角色卡池五星类型分布", font=dict(family="Microsoft YaHei", size=12))
-            fig1.update_traces(textposition='inside', textinfo='percent+label')
-            p1 = base + "_角色五星饼图.png"
-            fig1.write_image(p1)
-            chart_files.append(p1)
-            print(t("export.chart_saved", filename=p1))
-        else:
-            p1 = None
+            if not char_5.empty:
+                skk = sum(char_5["获得物品"] == "丝柯克")
+                akf = sum(char_5["获得物品"] == "爱可菲")
+                std = sum(char_5["获得物品"].isin(STANDARD_CHARS))
+                
+                # 构建动态标签和值
+                labels = []
+                values = []
+                if skk > 0:
+                    labels.append("丝柯克")
+                    values.append(skk)
+                if akf > 0:
+                    labels.append("爱可菲")
+                    values.append(akf)
+                if std > 0:
+                    labels.append("常驻角色")
+                    values.append(std)
+                
+                if labels:
+                    fig1 = go.Figure(data=[go.Pie(labels=labels, values=values)])
+                    fig1.update_layout(title_text="角色卡池五星类型分布", font=dict(family="Microsoft YaHei", size=12))
+                    fig1.update_traces(textposition='inside', textinfo='percent+label')
+                    p1 = base + "_角色五星饼图.png"
+                    fig1.write_image(p1)
+                    chart_files.append(p1)
+                    print(t("export.chart_saved", filename=p1))
 
-        # 2. 武器池五星类型分布饼图
+        # 2. 武器池五星类型分布饼图（动态标签）
         if not df_weapon.empty:
             wp_5 = df_weapon[df_weapon["星级"] == 5]
-            w1 = sum(wp_5["获得物品"] == t("banner.w1_name"))
-            w2 = sum(wp_5["获得物品"] == t("banner.w2_name"))
-            std_w = sum(wp_5["获得物品"].isin(STANDARD_WEAPONS))
-            fig2 = go.Figure(data=[go.Pie(labels=[t("banner.w1_name"), t("banner.w2_name"), "常驻武器"],
-                                            values=[w1, w2, std_w])])
-            fig2.update_layout(title_text="武器卡池五星类型分布", font=dict(family="Microsoft YaHei", size=12))
-            fig2.update_traces(textposition='inside', textinfo='percent+label')
-            p2 = base + "_武器五星饼图.png"
-            fig2.write_image(p2)
-            chart_files.append(p2)
-            print(t("export.chart_saved", filename=p2))
-        else:
-            p2 = None
+            if not wp_5.empty:
+                w1 = sum(wp_5["获得物品"] == t("banner.w1_name"))
+                w2 = sum(wp_5["获得物品"] == t("banner.w2_name"))
+                std_w = sum(wp_5["获得物品"].isin(STANDARD_WEAPONS))
+                
+                labels = []
+                values = []
+                if w1 > 0:
+                    labels.append(t("banner.w1_name"))
+                    values.append(w1)
+                if w2 > 0:
+                    labels.append(t("banner.w2_name"))
+                    values.append(w2)
+                if std_w > 0:
+                    labels.append("常驻武器")
+                    values.append(std_w)
+                
+                if labels:
+                    fig2 = go.Figure(data=[go.Pie(labels=labels, values=values)])
+                    fig2.update_layout(title_text="武器卡池五星类型分布", font=dict(family="Microsoft YaHei", size=12))
+                    fig2.update_traces(textposition='inside', textinfo='percent+label')
+                    p2 = base + "_武器五星饼图.png"
+                    fig2.write_image(p2)
+                    chart_files.append(p2)
+                    print(t("export.chart_saved", filename=p2))
 
-        # 3. 四星物品数量TOP10横向条形图
+        # 3. 四星物品数量TOP10横向条形图（动态高度）
         four_star_items = Counter()
         for r in state.records_all:
             if r["星级"] == 4:
@@ -1280,6 +1321,9 @@ def generate_plots(state, excel_file):
         top4 = four_star_items.most_common(10)
         if top4:
             names, counts = zip(*top4)
+            num_items = len(names)
+            # 动态高度：每个条目约40px，最小高度300px
+            height = max(300, num_items * 40 + 80)  # 加80用于标题和边距
             fig3 = go.Figure(data=[go.Bar(x=counts, y=names, orientation='h')])
             fig3.update_layout(
                 title_text="四星物品获取数量TOP10",
@@ -1287,7 +1331,7 @@ def generate_plots(state, excel_file):
                 xaxis_title="数量",
                 yaxis_title="物品",
                 width=600,
-                height=400,
+                height=height,
                 bargap=0.2,
                 margin=dict(l=120, r=50, t=80, b=50)
             )
@@ -1297,8 +1341,6 @@ def generate_plots(state, excel_file):
             fig3.write_image(p3)
             chart_files.append(p3)
             print(t("export.chart_saved", filename=p3))
-        else:
-            p3 = None
 
         # 4. 五星物品数量TOP10条形图（自动调整尺寸）
         five_star_items = Counter()
@@ -1331,8 +1373,6 @@ def generate_plots(state, excel_file):
             fig4.write_image(p4)
             chart_files.append(p4)
             print(t("export.chart_saved", filename=p4))
-        else:
-            p4 = None
 
     except Exception as e:
         print(f"❌ 生成图表时发生错误: {e}")
