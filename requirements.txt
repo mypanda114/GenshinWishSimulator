@@ -1,0 +1,13 @@
+# 核心数据处理
+pandas==3.0.1           # 数据框操作，Excel 读写
+numpy==2.4.3            # 数值计算，概率模拟支持
+
+# Excel 写入支持
+openpyxl==3.1.5         # 处理 Excel 文件样式和表格
+
+# 可视化
+plotly==6.6.0           # 生成交互式图表（PNG 导出需要 kaleido）
+kaleido==1.2.0          # Plotly 图片导出引擎
+
+# Word 报告生成
+python-docx==1.2.0      # 生成 Word 分析报告

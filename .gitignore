@@ -1,0 +1,44 @@
+﻿# 虚拟环境
+venv/
+env/
+ENV/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 项目生成数据
+output/
+*.xlsx
+*.html
+*.png
+*.docx
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Obsidian
+.obsidian/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 环境变量
+.env
+*.env
+
+# 日志
+*.log
+
+# 打包文件
+*.egg-info/
+dist/
+build/
