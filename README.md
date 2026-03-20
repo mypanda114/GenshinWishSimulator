@@ -46,7 +46,7 @@ A personal study-oriented wish simulator based on official rules and community c
 1. **Install Python 3.9+** and ensure it's added to PATH.
 2. **Clone or download this project**:
    ```bash
-   git clone https://github.com/yourname/GenshinWishSimulator.git
+   git clone https://github.com/mypanda114/GenshinWishSimulator
    cd GenshinWishSimulator
    ```
 3. **Create and activate a virtual environment** (recommended):
